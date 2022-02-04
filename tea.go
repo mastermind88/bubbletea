@@ -97,6 +97,8 @@ type Program struct {
 	// is on by default.
 	CatchPanics bool
 
+	killc chan bool
+
 	console console.Console
 
 	// Stores the original reference to stdin for cases where input is not a
@@ -248,6 +250,7 @@ func NewProgram(model Model, opts ...ProgramOption) *Program {
 		input:        os.Stdin,
 		msgs:         make(chan Msg),
 		CatchPanics:  true,
+		killc:        make(chan bool, 1),
 	}
 
 	// Apply all options to the program.
@@ -486,6 +489,8 @@ func (p *Program) StartReturningModel() (Model, error) {
 	// Handle updates and draw.
 	for {
 		select {
+		case <-p.killc:
+			return nil, nil
 		case err := <-errs:
 			cancelContext()
 			waitForGoroutines(cancelReader.Cancel())
@@ -575,6 +580,16 @@ func (p *Program) Send(msg Msg) {
 // slightly, or it may be removed in a future version of this package.
 func (p *Program) Quit() {
 	p.Send(Quit())
+}
+
+// Kill stops the program immediately and restores the former terminal state.
+// This final render than you would normally see when quitting will be skipped.
+//
+// This method is currently provisional. The method signature may alter
+// slightly, or it may be removed in a future version of this package.
+func (p *Program) Kill() {
+	p.killc <- true
+	p.shutdown(true)
 }
 
 // shutdown performs operations to free up resources and restore the terminal
